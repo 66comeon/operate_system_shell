@@ -49,17 +49,20 @@ cmdArgv getParsedCmdArgv(char *str,const char* delimiters){
     if(strcmp(token,"cd") == 0){
         //该命令为内部命令，直接执行
         token = strtok(NULL,delimiters);
-        if(strcmp(token,"~") == 0){
-            strcpy(token,"/home/lb");
+        char path[MAX_PATH_LEN];
+        if(token == NULL || strcmp(token,"~") == 0){
+            //如果token == NULL 下面这段代码就是无效代码，会出现段错误
+            // strcpy(token,"/home/lb");
+            strcpy(path,"/home/lb");
+        }else{
+           strcpy(path,token);
         }
-        chdir(token);
+        chdir(path);
         return NULL;
     }
     if(strcmp(token,"exit") == 0){
         //内部命令直接执行exit系统调用
-        asm("movl $1,%eax\n\t"
-                "movl $0,%ebx\n\t"
-                "int $0x80");
+        exit(0);
     }
     parsedCmdArgv -> commend[i++] = token;
     char filePath[MAX_PATH_LEN] = "/bin/";
@@ -92,14 +95,12 @@ int main()
         commend[strlen(commend)-1] = '\0';
         //分解命令
         cmdArgv parsecmd = getParsedCmdArgv(commend," ");
-        
-        
         //执行命令
         int status;
         if(fork() !=0){
             waitpid(-1,&status,0);
         }
-        else{
+        else if(parsecmd != NULL){
             execve(parsecmd -> filename,parsecmd -> commend,NULL);
         }
     }
