@@ -4,7 +4,6 @@
 #include<string.h>
 #include <sys/types.h> 
 #include<sys/wait.h>
-#include<assert.h>
 #include<pwd.h>
 
 //宏定义
@@ -14,12 +13,13 @@
 #define MAX_COMMEND_LEN 100
 
 //结构体定义
-typedef struct{
+struct commend{
     char *commend[MAX_COMMEND_LEN];
     char  filename[MAX_PATH_LEN];
     int cmdnum; //参数个数
-}cmdArgv;
+};
 
+typedef struct commend* cmdArgv;
 
 //函数定义
 void type_promote(){
@@ -35,45 +35,54 @@ void type_promote(){
 }
 
 //命令分解
-cmdArgv* parsecommend(char *str,const char delimiters){
-    cmdArgv *commendArgv = (cmdArgv*)malloc(sizeof(cmdArgv));
-    if(commendArgv == NULL){
+cmdArgv getParsedCmdArgv(char *str,const char* delimiters){
+    cmdArgv parsedCmdArgv = (cmdArgv)malloc(sizeof(struct commend));
+    if(parsedCmdArgv == NULL){
         //申请内存失败
         printf("申请内存失败\n");
         return NULL;
     }
-    //遍历 str
-    int row = 0,colum = 0,flag = 1,index = 0; //指向命令二维数组的行指针,列的指针
-    for(int i=0;i<strlen(str);i++){
-        //第一个分割符之前的都为命令
-        if(str[i] != delimiters){
-            commendArgv -> commend[row][colum] = str[i];
-            if(flag == 1){
-                commendArgv -> filename[colum] = str[i];
-                index = colum;
-            }
-            colum++;
-            
+    //通过strtok分解命令
+    int i = 0;
+    //获得命令部分
+    char* token = strtok(str,delimiters);
+    if(strcmp(token,"cd") == 0){
+        //该命令为内部命令，直接执行
+        token = strtok(NULL,delimiters);
+        if(strcmp(token,"~") == 0){
+            strcpy(token,"/home/lb");
         }
-        else{
-            commendArgv -> commend[row][colum] = '\0';
-            row++;
-            colum = 0;
-            flag = 0;
-            commendArgv -> cmdnum++;
-        }
-
+        chdir(token);
+        return NULL;
     }
-    commendArgv -> cmdnum = commendArgv -> cmdnum+1;//命令数等于空格数加一
-    commendArgv -> filename[++index] = '\0';
-    //命令数组最后一行加一个NULL
-    commendArgv -> commend[row+1] = NULL;
-    return commendArgv;
+    if(strcmp(token,"exit") == 0){
+        //内部命令直接执行exit系统调用
+        asm("movl $1,%eax\n\t"
+                "movl $0,%ebx\n\t"
+                "int $0x80");
+    }
+    parsedCmdArgv -> commend[i++] = token;
+    char filePath[MAX_PATH_LEN] = "/bin/";
+    //构造命令所在的文件
+    strcat(filePath,token);
+    strcpy(parsedCmdArgv -> filename,filePath);
 
+    while(token){
+        token = strtok(NULL,delimiters);
+        if(token == NULL){
+            break;
+        }
+        parsedCmdArgv -> commend[i++] = token;
+    }
+    parsedCmdArgv -> commend[i] = NULL;
+    parsedCmdArgv -> cmdnum = i;
+    return parsedCmdArgv;
 }
+
 
 int main()
 {
+    
     while(TRUE){
         //打印命令提示符
         type_promote();
@@ -82,26 +91,17 @@ int main()
         fgets(commend,MAX_COMMEND_LEN,stdin);
         commend[strlen(commend)-1] = '\0';
         //分解命令
-        cmdArgv* parsecmd = parsecommend(commend,' ');
-        printf("%d",parsecmd->cmdnum);
-        for(int i=0;i<parsecmd -> cmdnum;i++){
-            for(int j=0;j<strlen(parsecmd -> commend[i]);j++){
-                printf("%c",parsecmd -> commend[i][j]);
-            }
-            printf("\n");
-        }
+        cmdArgv parsecmd = getParsedCmdArgv(commend," ");
+        
+        
         //执行命令
-        char filepath[MAX_PATH_LEN] = "/bin/";
-        strcat(filepath,parsecmd -> filename);
-        printf("%s\n",filepath);
         int status;
         if(fork() !=0){
             waitpid(-1,&status,0);
         }
         else{
-            execve(filepath,parsecmd -> commend,NULL);
+            execve(parsecmd -> filename,parsecmd -> commend,NULL);
         }
-        commend[0] = '\0';
     }
 
 
